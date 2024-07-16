@@ -1,4 +1,5 @@
 import functools
+import json
 import os
 import platform
 import re
@@ -19,7 +20,7 @@ with open("README.md", mode="r", encoding="utf-8") as fh:
 IS_DEV_MODE = os.getenv("IS_DEV_MODE", "true").lower() == "true"
 # If you modify the version, please modify the version in the following files:
 # dbgpt/_version.py
-DB_GPT_VERSION = os.getenv("DB_GPT_VERSION", "0.5.8")
+DB_GPT_VERSION = os.getenv("DB_GPT_VERSION", "0.5.9")
 
 BUILD_NO_CACHE = os.getenv("BUILD_NO_CACHE", "true").lower() == "true"
 LLAMA_CPP_GPU_ACCELERATION = (
@@ -31,6 +32,7 @@ BUILD_FROM_SOURCE_URL_FAST_CHAT = os.getenv(
 )
 BUILD_VERSION_OPENAI = os.getenv("BUILD_VERSION_OPENAI")
 INCLUDE_QUANTIZATION = os.getenv("INCLUDE_QUANTIZATION", "true").lower() == "true"
+INCLUDE_OBSERVABILITY = os.getenv("INCLUDE_OBSERVABILITY", "true").lower() == "true"
 
 
 def parse_requirements(file_name: str) -> List[str]:
@@ -424,6 +426,8 @@ def core_requires():
     setup_spec.extras["client"] = setup_spec.extras["core"] + [
         "httpx",
         "fastapi>=0.100.0",
+        # For retry, chromadb need tenacity<=8.3.0
+        "tenacity<=8.3.0",
     ]
     # Simple command line dependencies
     setup_spec.extras["cli"] = setup_spec.extras["client"] + [
@@ -440,6 +444,8 @@ def core_requires():
         # https://github.com/eosphoros-ai/DB-GPT/issues/551
         # TODO: remove pandas dependency
         "pandas==2.0.3",
+        # numpy should less than 2.0.0
+        "numpy>=1.21.0,<2.0.0",
     ]
 
     # Just use by DB-GPT internal, we should find the smallest dependency set for run
@@ -548,7 +554,7 @@ def quantization_requires():
         # 1. Compute Capability 7.5 (sm75). Turing and later architectures are supported.
         # 2. CUDA Toolkit 11.8 and later.
         cuda_version = get_cuda_version()
-        autoawq_latest_version = get_latest_version("autoawq", "", "0.2.4")
+        # autoawq_latest_version = get_latest_version("autoawq", "", "0.2.4")
         if cuda_version is None or cuda_version == "12.1":
             quantization_pkgs.extend(["autoawq", _build_autoawq_requires(), "optimum"])
         else:
@@ -624,6 +630,9 @@ def openai_requires():
     else:
         setup_spec.extras["openai"].append("openai")
 
+    if INCLUDE_OBSERVABILITY:
+        setup_spec.extras["openai"] += setup_spec.extras["observability"]
+
     setup_spec.extras["openai"] += setup_spec.extras["framework"]
     setup_spec.extras["openai"] += setup_spec.extras["rag"]
 
@@ -649,6 +658,19 @@ def cache_requires():
     setup_spec.extras["cache"] = ["rocksdict"]
 
 
+def observability_requires():
+    """
+    pip install "dbgpt[observability]"
+
+    Send DB-GPT traces to OpenTelemetry compatible backends.
+    """
+    setup_spec.extras["observability"] = [
+        "opentelemetry-api",
+        "opentelemetry-sdk",
+        "opentelemetry-exporter-otlp",
+    ]
+
+
 def default_requires():
     """
     pip install "dbgpt[default]"
@@ -667,10 +689,12 @@ def default_requires():
     setup_spec.extras["default"] += setup_spec.extras["rag"]
     setup_spec.extras["default"] += setup_spec.extras["datasource"]
     setup_spec.extras["default"] += setup_spec.extras["torch"]
+    setup_spec.extras["default"] += setup_spec.extras["cache"]
     if INCLUDE_QUANTIZATION:
         # Add quantization extra to default, default is True
         setup_spec.extras["default"] += setup_spec.extras["quantization"]
-    setup_spec.extras["default"] += setup_spec.extras["cache"]
+    if INCLUDE_OBSERVABILITY:
+        setup_spec.extras["default"] += setup_spec.extras["observability"]
 
 
 def all_requires():
@@ -694,11 +718,12 @@ quantization_requires()
 all_vector_store_requires()
 all_datasource_requires()
 knowledge_requires()
-openai_requires()
 gpt4all_requires()
 vllm_requires()
 cache_requires()
+observability_requires()
 
+openai_requires()
 # must be last
 default_requires()
 all_requires()
@@ -749,6 +774,25 @@ else:
         ],
     )
 
+
+class PrintExtrasCommand(setuptools.Command):
+    description = "print extras_require"
+    user_options = [
+        ("output=", "o", "Path to output the extras_require JSON"),
+    ]
+
+    def initialize_options(self):
+        self.output = None
+
+    def finalize_options(self):
+        if self.output is None:
+            raise ValueError("output is not set")
+
+    def run(self):
+        with open(self.output, "w") as f:
+            json.dump(setup_spec.unique_extras, f, indent=2)
+
+
 setuptools.setup(
     name="dbgpt",
     packages=packages,
@@ -766,6 +810,9 @@ setuptools.setup(
     license="https://opensource.org/license/mit/",
     python_requires=">=3.10",
     extras_require=setup_spec.unique_extras,
+    cmdclass={
+        "print_extras": PrintExtrasCommand,
+    },
     entry_points={
         "console_scripts": [
             "dbgpt=dbgpt.cli.cli_scripts:main",

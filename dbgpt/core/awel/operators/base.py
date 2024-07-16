@@ -24,6 +24,7 @@ from dbgpt.util.executor_utils import (
     DefaultExecutorFactory,
     blocking_func_to_async,
 )
+from dbgpt.util.tracer import root_tracer
 
 from ..dag.base import DAG, DAGContext, DAGNode, DAGVar
 from ..task.base import EMPTY_DATA, OUT, T, TaskOutput, is_empty_data
@@ -137,6 +138,7 @@ class BaseOperator(DAGNode, ABC, Generic[OUT], metaclass=BaseOperatorMeta):
         task_name: Optional[str] = None,
         dag: Optional[DAG] = None,
         runner: Optional[WorkflowRunner] = None,
+        can_skip_in_branch: bool = True,
         **kwargs,
     ) -> None:
         """Create a BaseOperator with an optional workflow runner.
@@ -157,6 +159,7 @@ class BaseOperator(DAGNode, ABC, Generic[OUT], metaclass=BaseOperatorMeta):
 
         self._runner: WorkflowRunner = runner
         self._dag_ctx: Optional[DAGContext] = None
+        self._can_skip_in_branch = can_skip_in_branch
 
     @property
     def current_dag_context(self) -> DAGContext:
@@ -216,10 +219,11 @@ class BaseOperator(DAGNode, ABC, Generic[OUT], metaclass=BaseOperatorMeta):
         """
         if not is_empty_data(call_data):
             call_data = {"data": call_data}
-        out_ctx = await self._runner.execute_workflow(
-            self, call_data, exist_dag_ctx=dag_ctx
-        )
-        return out_ctx.current_task_context.task_output.output
+        with root_tracer.start_span("dbgpt.awel.operator.call"):
+            out_ctx = await self._runner.execute_workflow(
+                self, call_data, exist_dag_ctx=dag_ctx
+            )
+            return out_ctx.current_task_context.task_output.output
 
     def _blocking_call(
         self,
@@ -263,19 +267,27 @@ class BaseOperator(DAGNode, ABC, Generic[OUT], metaclass=BaseOperatorMeta):
         """
         if call_data != EMPTY_DATA:
             call_data = {"data": call_data}
-        out_ctx = await self._runner.execute_workflow(
-            self, call_data, streaming_call=True, exist_dag_ctx=dag_ctx
-        )
+        with root_tracer.start_span("dbgpt.awel.operator.call_stream"):
 
-        task_output = out_ctx.current_task_context.task_output
-        if task_output.is_stream:
-            return out_ctx.current_task_context.task_output.output_stream
-        else:
+            out_ctx = await self._runner.execute_workflow(
+                self, call_data, streaming_call=True, exist_dag_ctx=dag_ctx
+            )
 
-            async def _gen():
-                yield task_output.output
+            task_output = out_ctx.current_task_context.task_output
+            if task_output.is_stream:
+                stream_generator = (
+                    out_ctx.current_task_context.task_output.output_stream
+                )
+            else:
 
-            return _gen()
+                # No stream output, wrap the output in a stream
+                async def _gen():
+                    yield task_output.output
+
+                stream_generator = _gen()
+            return root_tracer.wrapper_async_stream(
+                stream_generator, "dbgpt.awel.operator.call_stream.iterate"
+            )
 
     def _blocking_call_stream(
         self,
@@ -320,6 +332,10 @@ class BaseOperator(DAGNode, ABC, Generic[OUT], metaclass=BaseOperatorMeta):
     def current_event_loop_task_id(self) -> int:
         """Get the current event loop task id."""
         return id(asyncio.current_task())
+
+    def can_skip_in_branch(self) -> bool:
+        """Check if the operator can be skipped in the branch."""
+        return self._can_skip_in_branch
 
 
 def initialize_runner(runner: WorkflowRunner):
