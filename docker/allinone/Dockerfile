@@ -2,6 +2,7 @@ ARG BASE_IMAGE="eosphorosai/dbgpt:latest"
 
 FROM ${BASE_IMAGE}
 
+RUN pip config set global.index-url https://mirrors.aliyun.com/pypi/simple
 RUN pip install dashscope
 RUN apt-get update && apt-get install -y wget gnupg lsb-release net-tools
 

@@ -114,7 +114,17 @@ class BaseOutputParser(MapOperator[ModelOutput, Any], ABC):
         """Parse the output of an LLM call."""
         resp_obj_ex = _parse_model_response(response)
         if isinstance(resp_obj_ex, str):
-            resp_obj_ex = json.loads(resp_obj_ex)
+            if resp_obj_ex.strip():  # 确保字符串不只是空白字符
+                    try:
+                        resp_obj_ex = json.loads(resp_obj_ex)
+                    except json.decoder.JSONDecodeError:
+                        # 处理错误或记录日志
+                        print("JSON解析错误，输入可能不是有效的JSON字符串。")
+                        return None  # 或者根据你的需求返回一个合适的值
+            else:
+                print("响应为空或只包含空白字符。")
+                return None  # 或者根据你的需求返回一个合适的值
+
         if resp_obj_ex["error_code"] == 0:
             all_text = resp_obj_ex["text"]
             # Parse the returned text to get the AI reply part

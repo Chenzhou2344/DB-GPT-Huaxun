@@ -3,6 +3,9 @@ ARG BASE_IMAGE="nvidia/cuda:12.1.0-runtime-ubuntu22.04"
 FROM ${BASE_IMAGE}
 ARG BASE_IMAGE
 
+RUN rm -f /etc/apt/sources.list
+COPY ./sources.list /etc/apt/sources.list
+
 # libpq-dev for PG
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git python3 pip \
     wget sqlite3 tzdata libpq-dev default-libmysqlclient-dev \

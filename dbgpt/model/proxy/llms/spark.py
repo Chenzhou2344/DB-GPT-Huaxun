@@ -14,8 +14,7 @@ from dbgpt.model.parameter import ProxyModelParameters
 from dbgpt.model.proxy.base import ProxyLLMClient
 from dbgpt.model.proxy.llms.proxy_model import ProxyModel
 
-SPARK_DEFAULT_API_VERSION = "v3"
-
+SPARK_DEFAULT_API_VERSION = "v3.5"
 
 def getlength(text):
     length = 0
@@ -138,10 +137,13 @@ class SparkLLMClient(ProxyLLMClient):
             model_version = model or os.getenv("XUNFEI_SPARK_API_VERSION")
         if not api_base:
             if model_version == SPARK_DEFAULT_API_VERSION:
-                api_base = "ws://spark-api.xf-yun.com/v3.1/chat"
+                api_base = "wss://spark-api.xf-yun.com/v3.5/chat"
+                domain = "generalv3.5"
+            elif model_version == "v3":
+                api_base = "wss://spark-api.xf-yun.com/v3.1/chat"
                 domain = "generalv3"
             else:
-                api_base = "ws://spark-api.xf-yun.com/v2.1/chat"
+                api_base = "wss://spark-api.xf-yun.com/v2.1/chat"
                 domain = "generalv2"
             if not api_domain:
                 api_domain = domain

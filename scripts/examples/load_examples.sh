@@ -54,6 +54,10 @@ if [[ $help ]]; then
 fi
 
 if [ -n $SQL_FILE ];then
+    echo "Execute SQL file ${SQL_FILE}"
+    sqlite3 $DB_FILE < $SQL_FILE
+
+else
     mkdir -p $WORK_DIR/pilot/data
     for file in $WORK_DIR/docker/examples/sqls/*_sqlite.sql
     do
@@ -61,9 +65,6 @@ if [ -n $SQL_FILE ];then
         sqlite3 $DB_FILE  < "$file"
     done
 
-else
-    echo "Execute SQL file ${SQL_FILE}"
-    sqlite3 $DB_FILE < $SQL_FILE
 fi
 
 

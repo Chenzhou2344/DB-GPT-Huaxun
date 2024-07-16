@@ -62,7 +62,6 @@ class PromptTemplateRegistry:
             _register_scene_prompt_template(
                 scene_registry, prompt_template, language, [_DEFAULT_MODEL_KEY]
             )
-
     def get_prompt_template(
         self,
         scene_name: str,

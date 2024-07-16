@@ -5,6 +5,7 @@ from dbgpt.agent.util.api_call import ApiCall
 from dbgpt.app.scene import BaseChat, ChatScene
 from dbgpt.util.executor_utils import blocking_func_to_async
 from dbgpt.util.tracer import root_tracer, trace
+# from additional_knowledge import extract_additional_info
 
 CFG = Config()
 
@@ -40,6 +41,7 @@ class ChatWithDbAutoExecute(BaseChat):
             self.database = CFG.local_db_manager.get_connector(self.db_name)
 
         self.top_k: int = 50
+        self.additional_info: str = ""
         self.api_call = ApiCall()
 
     @trace()
@@ -69,6 +71,8 @@ class ChatWithDbAutoExecute(BaseChat):
                 self._executor, self.database.table_simple_info
             )
 
+        # self.additional_info = extract_additional_info(self.current_user_input, '/home/yons/Desktop/DB-GPT/pilot/data/additional_knowledge.txt')
+
         input_values = {
             "db_name": self.db_name,
             "user_input": self.current_user_input,
@@ -76,6 +80,7 @@ class ChatWithDbAutoExecute(BaseChat):
             "dialect": self.database.dialect,
             "table_info": table_infos,
             "display_type": self._generate_numbered_list(),
+            "additional_info": self.additional_info,
         }
         return input_values
 

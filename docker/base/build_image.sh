@@ -12,7 +12,8 @@ IMAGE_NAME="eosphorosai/dbgpt"
 IMAGE_NAME_ARGS=""
 
 # zh: https://pypi.tuna.tsinghua.edu.cn/simple
-PIP_INDEX_URL="https://pypi.org/simple"
+# PIP_INDEX_URL="https://pypi.org/simple"
+PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
 # en or zh
 LANGUAGE="en"
 BUILD_LOCAL_CODE="true"
